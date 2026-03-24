@@ -13,7 +13,7 @@ async function callGemini(
   const { GoogleGenerativeAI } = await import("@google/generative-ai");
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: "gemini-2.0-flash",
     systemInstruction: systemPrompt,
   });
 
@@ -70,20 +70,28 @@ async function callAnthropic(
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, systemPrompt, provider, apiKey } = await req.json();
+    const body = await req.json();
+    const { messages, systemPrompt, provider, apiKey } = body;
 
-    if (!messages || !systemPrompt) {
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
-        { error: "messages와 systemPrompt가 필요합니다" },
+        { error: "메시지가 필요합니다." },
         { status: 400 }
       );
     }
 
-    if (!apiKey) {
+    if (!systemPrompt) {
+      return NextResponse.json(
+        { error: "시스템 프롬프트가 필요합니다." },
+        { status: 400 }
+      );
+    }
+
+    if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length < 10) {
       return NextResponse.json(
         {
           error:
-            "API 키가 필요합니다. 왼쪽 하단 API 설정에서 키를 입력해주세요.",
+            "유효한 API 키가 필요합니다. 왼쪽 하단 [API 설정]에서 키를 입력해주세요.",
         },
         { status: 401 }
       );
@@ -93,45 +101,51 @@ export async function POST(req: NextRequest) {
 
     switch (provider) {
       case "gemini":
-        content = await callGemini(apiKey, systemPrompt, messages);
+        content = await callGemini(apiKey.trim(), systemPrompt, messages);
         break;
       case "openai":
-        content = await callOpenAI(apiKey, systemPrompt, messages);
+        content = await callOpenAI(apiKey.trim(), systemPrompt, messages);
         break;
       case "anthropic":
-        content = await callAnthropic(apiKey, systemPrompt, messages);
+        content = await callAnthropic(apiKey.trim(), systemPrompt, messages);
         break;
       default:
-        content = await callGemini(apiKey, systemPrompt, messages);
+        content = await callGemini(apiKey.trim(), systemPrompt, messages);
     }
 
     return NextResponse.json({ content });
   } catch (error: unknown) {
     console.error("Chat API error:", error);
 
-    const message =
-      error instanceof Error ? error.message : "알 수 없는 오류";
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const errStr = errMsg.toLowerCase();
 
+    // API 키 오류
     if (
-      message.includes("API_KEY") ||
-      message.includes("api_key") ||
-      message.includes("401") ||
-      message.includes("authentication") ||
-      message.includes("Unauthorized")
+      errStr.includes("api_key") ||
+      errStr.includes("apikey") ||
+      errStr.includes("api key") ||
+      errStr.includes("401") ||
+      errStr.includes("authentication") ||
+      errStr.includes("unauthorized") ||
+      errStr.includes("permission") ||
+      errStr.includes("invalid")
     ) {
       return NextResponse.json(
         {
-          error:
-            "API 키가 유효하지 않습니다. API 설정에서 키를 확인해주세요.",
+          error: `API 키가 유효하지 않습니다. [API 설정]에서 키를 확인해주세요.\n\n상세: ${errMsg}`,
         },
         { status: 401 }
       );
     }
 
+    // 사용량 초과
     if (
-      message.includes("429") ||
-      message.includes("quota") ||
-      message.includes("rate")
+      errStr.includes("429") ||
+      errStr.includes("quota") ||
+      errStr.includes("rate") ||
+      errStr.includes("limit") ||
+      errStr.includes("exceeded")
     ) {
       return NextResponse.json(
         {
@@ -142,8 +156,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 모델 오류
+    if (
+      errStr.includes("model") ||
+      errStr.includes("not found") ||
+      errStr.includes("404")
+    ) {
+      return NextResponse.json(
+        {
+          error: `AI 모델을 찾을 수 없습니다. 다른 모델로 시도해주세요.\n\n상세: ${errMsg}`,
+        },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json(
-      { error: `AI 응답 생성 중 오류: ${message}` },
+      { error: `AI 응답 생성 중 오류가 발생했습니다.\n\n상세: ${errMsg}` },
       { status: 500 }
     );
   }

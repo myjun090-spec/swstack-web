@@ -22,7 +22,7 @@ export default function Sidebar() {
         <div className="p-4 border-b border-slate-700 flex items-center justify-between">
           {!collapsed && (
             <Link href="/" className="text-lg font-bold tracking-tight">
-              swstack
+              Dawith
             </Link>
           )}
           <button

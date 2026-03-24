@@ -12,7 +12,7 @@ export const PROVIDERS: Provider[] = [
   {
     id: "gemini",
     name: "Google Gemini",
-    model: "gemini-2.5-flash",
+    model: "gemini-2.0-flash",
     placeholder: "AIza...",
     helpUrl: "https://aistudio.google.com/apikey",
     free: true,

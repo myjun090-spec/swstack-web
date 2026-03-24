@@ -3,8 +3,8 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "swstack — 사회복지 실천 AI 도우미",
-  description: "사회복지 기관 운영을 위한 역할 기반 AI 에이전트 시스템",
+  title: "Dawith Welfare Helper — 사회복지 AI 도우미",
+  description: "사회복지 실천 현장을 위한 역할 기반 AI 업무 도우미",
 };
 
 export default function RootLayout({

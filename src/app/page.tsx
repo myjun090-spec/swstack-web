@@ -7,10 +7,10 @@ export default function Home() {
       {/* Hero */}
       <div className="mb-10">
         <h1 className="text-3xl font-bold text-slate-800 mb-2">
-          swstack
+          Dawith Welfare Helper
         </h1>
         <p className="text-lg text-slate-600">
-          사회복지 실천을 위한 AI 도우미 — 역할별 전문 스킬로 업무를 지원합니다
+          사회복지 실천 현장을 위한 AI 업무 도우미 — 역할별 전문 스킬로 업무를 지원합니다
         </p>
       </div>
 
