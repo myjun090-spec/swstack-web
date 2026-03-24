@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -13,6 +10,7 @@ async function callGemini(
   systemPrompt: string,
   messages: ChatMessage[]
 ): Promise<string> {
+  const { GoogleGenerativeAI } = await import("@google/generative-ai");
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
@@ -20,7 +18,7 @@ async function callGemini(
   });
 
   const history = messages.slice(0, -1).map((m) => ({
-    role: m.role === "assistant" ? "model" as const : "user" as const,
+    role: m.role === "assistant" ? ("model" as const) : ("user" as const),
     parts: [{ text: m.content }],
   }));
 
@@ -35,6 +33,7 @@ async function callOpenAI(
   systemPrompt: string,
   messages: ChatMessage[]
 ): Promise<string> {
+  const OpenAI = (await import("openai")).default;
   const openai = new OpenAI({ apiKey });
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -55,6 +54,7 @@ async function callAnthropic(
   systemPrompt: string,
   messages: ChatMessage[]
 ): Promise<string> {
+  const Anthropic = (await import("@anthropic-ai/sdk")).default;
   const anthropic = new Anthropic({ apiKey });
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
@@ -81,7 +81,10 @@ export async function POST(req: NextRequest) {
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: "API 키가 필요합니다. 왼쪽 하단 API 설정에서 키를 입력해주세요." },
+        {
+          error:
+            "API 키가 필요합니다. 왼쪽 하단 API 설정에서 키를 입력해주세요.",
+        },
         { status: 401 }
       );
     }
@@ -117,14 +120,24 @@ export async function POST(req: NextRequest) {
       message.includes("Unauthorized")
     ) {
       return NextResponse.json(
-        { error: "API 키가 유효하지 않습니다. API 설정에서 키를 확인해주세요." },
+        {
+          error:
+            "API 키가 유효하지 않습니다. API 설정에서 키를 확인해주세요.",
+        },
         { status: 401 }
       );
     }
 
-    if (message.includes("429") || message.includes("quota") || message.includes("rate")) {
+    if (
+      message.includes("429") ||
+      message.includes("quota") ||
+      message.includes("rate")
+    ) {
       return NextResponse.json(
-        { error: "API 사용량 한도에 도달했습니다. 잠시 후 다시 시도해주세요." },
+        {
+          error:
+            "API 사용량 한도에 도달했습니다. 잠시 후 다시 시도해주세요.",
+        },
         { status: 429 }
       );
     }
