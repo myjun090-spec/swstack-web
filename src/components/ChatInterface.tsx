@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import type { Skill } from "@/data/skills";
+import { getStoredProvider, getStoredApiKey } from "@/components/ApiKeySettings";
+import { PROVIDERS } from "@/lib/providers";
 
 interface Message {
   role: "user" | "assistant";
@@ -32,6 +34,23 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
+    const providerId = getStoredProvider();
+    const apiKey = getStoredApiKey(providerId);
+
+    if (!apiKey) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: input.trim() },
+        {
+          role: "assistant",
+          content:
+            "API 키가 설정되지 않았습니다.\n\n왼쪽 하단의 **API 설정** 버튼을 클릭하여 API 키를 입력해주세요.\n\nGoogle Gemini API는 무료로 사용 가능합니다.",
+        },
+      ]);
+      setInput("");
+      return;
+    }
+
     const userMessage = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
@@ -42,11 +61,10 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [
-            ...messages,
-            { role: "user", content: userMessage },
-          ],
+          messages: [...messages, { role: "user", content: userMessage }],
           systemPrompt: skill.systemPrompt,
+          provider: providerId,
+          apiKey: apiKey,
         }),
       });
 
@@ -61,12 +79,13 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
         { role: "assistant", content: data.content },
       ]);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "오류가 발생했습니다";
+      const errorMessage =
+        err instanceof Error ? err.message : "오류가 발생했습니다";
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `오류가 발생했습니다: ${errorMessage}\n\n.env.local 파일에 ANTHROPIC_API_KEY가 설정되어 있는지 확인해주세요.`,
+          content: `오류: ${errorMessage}\n\nAPI 키가 올바른지 확인해주세요. (왼쪽 하단 API 설정)`,
         },
       ]);
     } finally {
@@ -89,6 +108,8 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
     setMessages([{ role: "assistant", content: skill.initialMessage }]);
   };
 
+  const currentProvider = PROVIDERS.find((p) => p.id === getStoredProvider());
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -102,12 +123,19 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
             <p className="text-xs text-slate-400">{skill.role}</p>
           </div>
         </div>
-        <button
-          onClick={resetChat}
-          className="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
-        >
-          새 대화
-        </button>
+        <div className="flex items-center gap-3">
+          {currentProvider && (
+            <span className="text-xs px-2 py-1 bg-slate-100 text-slate-500 rounded-full">
+              {currentProvider.name}
+            </span>
+          )}
+          <button
+            onClick={resetChat}
+            className="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+          >
+            새 대화
+          </button>
+        </div>
       </div>
 
       {/* Messages */}

@@ -51,18 +51,44 @@ export default function Home() {
         );
       })}
 
-      {/* Info */}
-      <div className="mt-10 p-6 bg-blue-50 rounded-xl border border-blue-100">
-        <h3 className="font-semibold text-blue-800 mb-2">사용 방법</h3>
-        <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
-          <li>왼쪽 메뉴 또는 위 카드에서 원하는 스킬을 선택합니다</li>
-          <li>AI가 해당 역할로 전환되어 대화형으로 안내합니다</li>
-          <li>질문에 답하면 구조화된 문서가 자동 생성됩니다</li>
-          <li>완성된 문서를 복사하여 활용합니다</li>
+      {/* Getting Started */}
+      <div className="mt-10 p-6 bg-green-50 rounded-xl border border-green-100">
+        <h3 className="font-semibold text-green-800 mb-2">처음 사용하시나요?</h3>
+        <ol className="text-sm text-green-700 space-y-2 list-decimal list-inside">
+          <li>
+            왼쪽 하단 <strong>API 설정</strong> 버튼을 클릭합니다
+          </li>
+          <li>
+            AI 모델을 선택합니다 (Google Gemini 추천 — <strong>무료</strong>)
+          </li>
+          <li>
+            API 키를 입력합니다
+            <span className="block text-xs text-green-600 ml-5 mt-0.5">
+              Gemini 키 발급: aistudio.google.com/apikey (구글 계정으로 바로 발급)
+            </span>
+          </li>
+          <li>원하는 스킬을 선택하고 대화를 시작합니다</li>
+          <li>완성된 문서를 복사하여 한글/워드에 붙여넣기합니다</li>
         </ol>
-        <p className="text-xs text-blue-500 mt-3">
-          * ANTHROPIC_API_KEY 환경변수 설정이 필요합니다 (.env.local 파일)
-        </p>
+      </div>
+
+      {/* Supported Models */}
+      <div className="mt-4 p-6 bg-slate-50 rounded-xl border border-slate-200">
+        <h3 className="font-semibold text-slate-700 mb-2">지원 AI 모델</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div className="p-3 bg-white rounded-lg border border-green-200">
+            <div className="font-medium text-slate-800">Google Gemini</div>
+            <div className="text-green-600 text-xs font-medium">무료 — 일 1,500회</div>
+          </div>
+          <div className="p-3 bg-white rounded-lg border border-slate-200">
+            <div className="font-medium text-slate-800">ChatGPT</div>
+            <div className="text-slate-500 text-xs">저렴 — gpt-4o-mini</div>
+          </div>
+          <div className="p-3 bg-white rounded-lg border border-slate-200">
+            <div className="font-medium text-slate-800">Claude</div>
+            <div className="text-slate-500 text-xs">유료 — 최고 품질</div>
+          </div>
+        </div>
       </div>
     </div>
   );
