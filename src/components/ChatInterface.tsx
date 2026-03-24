@@ -16,8 +16,16 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [providerName, setProviderName] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 클라이언트에서만 provider 읽기 (hydration 문제 방지)
+  useEffect(() => {
+    const pid = getStoredProvider();
+    const p = PROVIDERS.find((pr) => pr.id === pid);
+    if (p) setProviderName(p.name);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -44,7 +52,7 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
         {
           role: "assistant",
           content:
-            "API 키가 설정되지 않았습니다.\n\n왼쪽 하단의 **API 설정** 버튼을 클릭하여 API 키를 입력해주세요.\n\nGoogle Gemini API는 무료로 사용 가능합니다.",
+            "API 키가 설정되지 않았습니다.\n\n왼쪽 하단의 [API 설정] 버튼을 클릭하여 API 키를 입력해주세요.\n\nGoogle Gemini API는 무료로 사용 가능합니다.",
         },
       ]);
       setInput("");
@@ -53,15 +61,24 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
 
     const userMessage = input.trim();
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+
+    const newMessages: Message[] = [
+      ...messages,
+      { role: "user", content: userMessage },
+    ];
+    setMessages(newMessages);
     setIsLoading(true);
 
     try {
+      // API에 보낼 메시지: 초기 assistant 인사말을 제거하고 user부터 시작
+      // Gemini/Claude/OpenAI 모두 첫 메시지가 user여야 함
+      const apiMessages = newMessages.filter((_, i) => i > 0); // 첫 번째(assistant 인사말) 제거
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...messages, { role: "user", content: userMessage }],
+          messages: apiMessages,
           systemPrompt: skill.systemPrompt,
           provider: providerId,
           apiKey: apiKey,
@@ -70,7 +87,7 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "API 요청 실패");
+        throw new Error(errorData.error || `API 요청 실패 (${res.status})`);
       }
 
       const data = await res.json();
@@ -85,7 +102,7 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
         ...prev,
         {
           role: "assistant",
-          content: `오류: ${errorMessage}\n\nAPI 키가 올바른지 확인해주세요. (왼쪽 하단 API 설정)`,
+          content: `오류: ${errorMessage}`,
         },
       ]);
     } finally {
@@ -108,8 +125,6 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
     setMessages([{ role: "assistant", content: skill.initialMessage }]);
   };
 
-  const currentProvider = PROVIDERS.find((p) => p.id === getStoredProvider());
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -124,9 +139,9 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {currentProvider && (
+          {providerName && (
             <span className="text-xs px-2 py-1 bg-slate-100 text-slate-500 rounded-full">
-              {currentProvider.name}
+              {providerName}
             </span>
           )}
           <button

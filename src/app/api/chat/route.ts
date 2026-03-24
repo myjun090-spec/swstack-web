@@ -97,20 +97,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 안전 장치: 메시지가 assistant로 시작하면 제거 (API 호환성)
+    let cleanMessages = [...messages];
+    while (cleanMessages.length > 0 && cleanMessages[0].role === "assistant") {
+      cleanMessages.shift();
+    }
+    if (cleanMessages.length === 0) {
+      return NextResponse.json(
+        { error: "유효한 사용자 메시지가 없습니다." },
+        { status: 400 }
+      );
+    }
+
     let content: string;
 
     switch (provider) {
       case "gemini":
-        content = await callGemini(apiKey.trim(), systemPrompt, messages);
+        content = await callGemini(apiKey.trim(), systemPrompt, cleanMessages);
         break;
       case "openai":
-        content = await callOpenAI(apiKey.trim(), systemPrompt, messages);
+        content = await callOpenAI(apiKey.trim(), systemPrompt, cleanMessages);
         break;
       case "anthropic":
-        content = await callAnthropic(apiKey.trim(), systemPrompt, messages);
+        content = await callAnthropic(apiKey.trim(), systemPrompt, cleanMessages);
         break;
       default:
-        content = await callGemini(apiKey.trim(), systemPrompt, messages);
+        content = await callGemini(apiKey.trim(), systemPrompt, cleanMessages);
     }
 
     return NextResponse.json({ content });
