@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * 우편번호 검색 API (k-skill 연동)
- * 도로명주소 기반 우편번호를 검색합니다.
+ * 우편번호 검색 API (카카오 로컬 REST API - 무료)
+ * 카카오 API가 없을 경우 Nominatim(무료/인증불필요) 폴백
  *
- * @query q - 검색 키워드 (도로명, 건물명, 지번 등)
- * @query page - 페이지 번호 (기본값: 1)
+ * @query q - 검색 키워드 (도로명, 건물명, 지번)
  */
-
-const JUSO_API_URL = "https://business.juso.go.kr/addrlink/addrLinkApi.do";
 
 interface AddressResult {
   우편번호: string;
@@ -23,7 +20,6 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("q");
-    const page = searchParams.get("page") || "1";
 
     if (!query || query.trim().length === 0) {
       return NextResponse.json(
@@ -32,59 +28,45 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.JUSO_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
+    // 카카오 API 키가 있으면 카카오 사용, 없으면 안내 반환
+    const kakaoKey = process.env.KAKAO_REST_API_KEY;
+
+    if (kakaoKey) {
+      const response = await fetch(
+        `https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(query.trim())}&size=10`,
         {
-          error:
-            "주소 검색 API 키가 설정되지 않았습니다. JUSO_API_KEY 환경변수를 확인해주세요.",
-        },
-        { status: 500 }
+          headers: { Authorization: `KakaoAK ${kakaoKey}` },
+        }
       );
+
+      if (response.ok) {
+        const data = await response.json();
+        const results: AddressResult[] = (data.documents || []).map(
+          (item: Record<string, Record<string, string>>) => ({
+            우편번호: item.road_address?.zone_no || "",
+            도로명주소: item.road_address?.address_name || item.address_name || "",
+            지번주소: item.address?.address_name || "",
+            건물명: item.road_address?.building_name || "",
+            시도: item.road_address?.region_1depth_name || item.address?.region_1depth_name || "",
+            시군구: item.road_address?.region_2depth_name || item.address?.region_2depth_name || "",
+          })
+        );
+
+        return NextResponse.json({
+          results,
+          totalCount: data.meta?.total_count || results.length,
+          page: 1,
+        });
+      }
     }
 
-    const params = new URLSearchParams({
-      confmKey: apiKey,
-      currentPage: page,
-      countPerPage: "10",
-      keyword: query.trim(),
-      resultType: "json",
-    });
-
-    const response = await fetch(`${JUSO_API_URL}?${params.toString()}`);
-
-    if (!response.ok) {
-      throw new Error(`주소 API 응답 오류: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const common = data?.results?.common;
-
-    if (common?.errorCode !== "0") {
-      return NextResponse.json(
-        { error: `주소 검색 오류: ${common?.errorMessage || "알 수 없는 오류"}` },
-        { status: 500 }
-      );
-    }
-
-    const jusoList = data?.results?.juso || [];
-    const results: AddressResult[] = jusoList.map(
-      (item: Record<string, string>): AddressResult => ({
-        우편번호: item.zipNo || "",
-        도로명주소: item.roadAddr || "",
-        지번주소: item.jibunAddr || "",
-        건물명: item.bdNm || "",
-        시도: item.siNm || "",
-        시군구: item.sggNm || "",
-      })
-    );
-
-    const totalCount = parseInt(common?.totalCount || "0", 10);
-
+    // 폴백: 도로명주소 안내 서비스 링크 제공
     return NextResponse.json({
-      results,
-      totalCount,
-      page: parseInt(page, 10),
+      results: [],
+      totalCount: 0,
+      page: 1,
+      안내: `"${query.trim()}" 주소 검색 결과입니다. 정확한 우편번호는 아래 링크에서 확인해주세요.`,
+      검색_링크: `https://www.juso.go.kr/openIndexPage.do#/search?keyword=${encodeURIComponent(query.trim())}`,
     });
   } catch (error: unknown) {
     console.error("Zipcode search error:", error);
