@@ -1,4 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  parseToolCalls,
+  hasToolCalls,
+  executeAllTools,
+  stripToolCalls,
+  formatToolResults,
+  getToolSystemPrompt,
+} from "@/lib/tool-executor";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -68,6 +76,27 @@ async function callAnthropic(
   return response.content[0].type === "text" ? response.content[0].text : "";
 }
 
+/**
+ * Call the selected LLM provider.
+ */
+async function callLLM(
+  provider: string,
+  apiKey: string,
+  systemPrompt: string,
+  messages: ChatMessage[]
+): Promise<string> {
+  switch (provider) {
+    case "gemini":
+      return callGemini(apiKey, systemPrompt, messages);
+    case "openai":
+      return callOpenAI(apiKey, systemPrompt, messages);
+    case "anthropic":
+      return callAnthropic(apiKey, systemPrompt, messages);
+    default:
+      return callGemini(apiKey, systemPrompt, messages);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -97,7 +126,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 안전 장치: 메시지가 assistant로 시작하면 제거 (API 호환성)
+    // Remove initial assistant greeting from messages (API compatibility)
     let cleanMessages = [...messages];
     while (cleanMessages.length > 0 && cleanMessages[0].role === "assistant") {
       cleanMessages.shift();
@@ -109,20 +138,62 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let content: string;
+    // Inject tool descriptions into the system prompt
+    const toolPrompt = getToolSystemPrompt();
+    const enhancedSystemPrompt = systemPrompt + "\n" + toolPrompt;
 
-    switch (provider) {
-      case "gemini":
-        content = await callGemini(apiKey.trim(), systemPrompt, cleanMessages);
-        break;
-      case "openai":
-        content = await callOpenAI(apiKey.trim(), systemPrompt, cleanMessages);
-        break;
-      case "anthropic":
-        content = await callAnthropic(apiKey.trim(), systemPrompt, cleanMessages);
-        break;
-      default:
-        content = await callGemini(apiKey.trim(), systemPrompt, cleanMessages);
+    // Determine the base URL for internal tool API calls
+    const proto = req.headers.get("x-forwarded-proto") || "http";
+    const host = req.headers.get("host") || "localhost:3000";
+    const baseUrl = `${proto}://${host}`;
+
+    // First LLM call
+    let content = await callLLM(
+      provider,
+      apiKey.trim(),
+      enhancedSystemPrompt,
+      cleanMessages
+    );
+
+    // Tool-calling loop: if the AI response contains tool calls,
+    // execute them and feed results back for a second LLM call.
+    // Max 1 round of tool calls to avoid infinite loops.
+    if (hasToolCalls(content)) {
+      const toolCalls = parseToolCalls(content);
+      const toolResults = await executeAllTools(toolCalls, baseUrl);
+      const resultText = formatToolResults(toolResults);
+      const cleanResponse = stripToolCalls(content);
+
+      // Build a follow-up conversation: inject tool results as a user message
+      // so the AI can incorporate real data into its answer.
+      const followUpMessages: ChatMessage[] = [
+        ...cleanMessages,
+        {
+          role: "assistant",
+          content: cleanResponse || "도구를 호출하여 정보를 조회합니다...",
+        },
+        {
+          role: "user",
+          content: `[시스템: 도구 호출 결과]\n\n${resultText}\n\n위 도구 결과를 바탕으로 사용자의 질문에 정확하고 친절하게 답변해주세요. 도구 호출 형식([TOOL_CALL])은 더 이상 사용하지 마세요.`,
+        },
+      ];
+
+      content = await callLLM(
+        provider,
+        apiKey.trim(),
+        enhancedSystemPrompt,
+        followUpMessages
+      );
+
+      // Return with metadata about which tools were called
+      const toolsMeta = toolResults.map((r) => ({
+        toolId: r.toolId,
+        toolName: r.toolName,
+        success: r.success,
+        error: r.error,
+      }));
+
+      return NextResponse.json({ content, toolsCalled: toolsMeta });
     }
 
     return NextResponse.json({ content });
@@ -132,7 +203,7 @@ export async function POST(req: NextRequest) {
     const errMsg = error instanceof Error ? error.message : String(error);
     const errStr = errMsg.toLowerCase();
 
-    // API 키 오류
+    // API key errors
     if (
       errStr.includes("api_key") ||
       errStr.includes("apikey") ||
@@ -151,7 +222,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 사용량 초과
+    // Rate limiting
     if (
       errStr.includes("429") ||
       errStr.includes("quota") ||
@@ -168,7 +239,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 모델 오류
+    // Model errors
     if (
       errStr.includes("model") ||
       errStr.includes("not found") ||

@@ -5,9 +5,17 @@ import type { Skill } from "@/data/skills";
 import { getStoredProvider, getStoredApiKey } from "@/components/ApiKeySettings";
 import { PROVIDERS } from "@/lib/providers";
 
+interface ToolMeta {
+  toolId: string;
+  toolName: string;
+  success: boolean;
+  error?: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
+  toolsCalled?: ToolMeta[];
 }
 
 export default function ChatInterface({ skill }: { skill: Skill }) {
@@ -20,7 +28,7 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // 클라이언트에서만 provider 읽기 (hydration 문제 방지)
+  // Read provider on client only (prevent hydration mismatch)
   useEffect(() => {
     const pid = getStoredProvider();
     const p = PROVIDERS.find((pr) => pr.id === pid);
@@ -70,9 +78,11 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
     setIsLoading(true);
 
     try {
-      // API에 보낼 메시지: 초기 assistant 인사말을 제거하고 user부터 시작
-      // Gemini/Claude/OpenAI 모두 첫 메시지가 user여야 함
-      const apiMessages = newMessages.filter((_, i) => i > 0); // 첫 번째(assistant 인사말) 제거
+      // Remove initial assistant greeting for API compatibility
+      const apiMessages = newMessages.filter((_, i) => i > 0).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
 
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -93,7 +103,11 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
       const data = await res.json();
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: data.content },
+        {
+          role: "assistant",
+          content: data.content,
+          toolsCalled: data.toolsCalled,
+        },
       ]);
     } catch (err) {
       const errorMessage =
@@ -169,6 +183,24 @@ export default function ChatInterface({ skill }: { skill: Skill }) {
                   : "bg-white border border-slate-200 text-slate-700"
               }`}
             >
+              {/* Tool usage indicator */}
+              {msg.toolsCalled && msg.toolsCalled.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {msg.toolsCalled.map((tool, ti) => (
+                    <span
+                      key={ti}
+                      className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
+                        tool.success
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : "bg-red-50 text-red-700 border border-red-200"
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                      {tool.toolName}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="whitespace-pre-wrap text-sm leading-relaxed">
                 {msg.content}
               </div>
